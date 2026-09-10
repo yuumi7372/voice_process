@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+
+    <title>Voice Process</title>
+
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 40px;
+        }
+
+        button {
+            font-size: 20px;
+            padding: 10px 20px;
+            margin-right: 10px;
+        }
+
+        #result {
+            font-size: 32px;
+            margin-top: 30px;
+        }
+
+        #pitchResult {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .character {
+            text-align: center;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            min-width: 60px;
+        }
+
+        .character-text {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .frequency {
+            font-size: 16px;
+        }
+
+        .note {
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+
+
+<body>
+
+    <h1>Voice Process</h1>
+
+
+    <button id="startButton">
+        START
+    </button>
+
+    <button id="stopButton">
+        STOP
+    </button>
+
+    <button id="resetButton">
+        RESET
+    </button>
+
+
+    <p id="status">
+        待機中
+    </p>
+
+
+    <h2>認識結果</h2>
+
+    <p id="result">
+        -
+    </p>
+
+
+    <h2>基本周波数</h2>
+
+    <div id="pitchResult">
+    </div>
+
+
+    <script>
+
+        const startButton =
+            document.getElementById(
+                "startButton"
+            );
+
+        const stopButton =
+            document.getElementById(
+                "stopButton"
+            );
+
+        const resetButton =
+            document.getElementById(
+                "resetButton"
+            );
+
+        const status =
+            document.getElementById(
+                "status"
+            );
+
+        const result =
+            document.getElementById(
+                "result"
+            );
+
+        const pitchResult =
+            document.getElementById(
+                "pitchResult"
+            );
+
+
+        // =========================
+        // START
+        // =========================
+
+        startButton.addEventListener(
+            "click",
+            async () => {
+
+                const response =
+                    await fetch(
+                        "/start",
+                        {
+                            method: "POST"
+                        }
+                    );
+
+                const data =
+                    await response.json();
+
+                if (
+                    data.status === "recording"
+                ) {
+
+                    status.textContent =
+                        "録音中...";
+
+                }
+
+            }
+        );
+
+
+        // =========================
+        // STOP
+        // =========================
+
+        stopButton.addEventListener(
+            "click",
+            async () => {
+
+                status.textContent =
+                    "音声認識・基本周波数解析中...";
+
+                const response =
+                    await fetch(
+                        "/stop",
+                        {
+                            method: "POST"
+                        }
+                    );
+
+                const data =
+                    await response.json();
+
+
+                if (
+                    data.status === "stopped"
+                ) {
+
+                    status.textContent =
+                        "録音終了";
+
+                    result.textContent =
+                        data.text;
+
+
+                    // 基本周波数表示
+                    pitchResult.innerHTML = "";
+
+
+                    data.pitch_data.forEach(
+                        (item) => {
+
+                            const character =
+                                document.createElement(
+                                    "div"
+                                );
+
+                            character.className =
+                                "character";
+
+
+                            character.innerHTML = `
+                                <div class="character-text">
+                                    ${item.character}
+                                </div>
+
+                                <div class="frequency">
+                                    ${
+                                        item.frequency
+                                            ? item.frequency.toFixed(1) + " Hz"
+                                            : "-"
+                                    }
+                                </div>
+
+                                <div class="note">
+                                    ${item.note}
+                                </div>
+                            `;
+
+
+                            pitchResult.appendChild(
+                                character
+                            );
+
+                        }
+                    );
+
+                }
+
+            }
+        );
+
+
+        // =========================
+        // RESET
+        // =========================
+
+        resetButton.addEventListener(
+            "click",
+            async () => {
+
+                await fetch(
+                    "/reset",
+                    {
+                        method: "POST"
+                    }
+                );
+
+                status.textContent =
+                    "待機中";
+
+                result.textContent =
+                    "-";
+
+                pitchResult.innerHTML =
+                    "";
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>
