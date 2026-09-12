@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Voice Analyzer</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 40px;
+
+            font-family:
+                Arial,
+                "Noto Sans JP",
+                sans-serif;
+
+            background: #f5f5f5;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            margin-top: 35px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 12px 25px;
+            margin-right: 10px;
+
+            border: none;
+            border-radius: 8px;
+
+            background: #222;
+            color: white;
+
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            margin-top: 20px;
+
+            border-radius: 12px;
+        }
+
+        /* =====================
+           F0
+        ===================== */
+
+        .f0-main {
+            font-size: 42px;
+            font-weight: bold;
+        }
+
+        .f0-note {
+            font-size: 24px;
+            margin-left: 10px;
+        }
+
+        .f0-info {
+            display: flex;
+            gap: 30px;
+            margin-top: 15px;
+        }
+
+        .f0-info div {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .label {
+            font-size: 13px;
+            color: #777;
+        }
+
+        /* =====================
+           Spectrum
+        ===================== */
+
+        canvas {
+            width: 100%;
+            display: block;
+        }
+
+        #spectrumCanvas {
+            height: 300px;
+        }
+
+        #f0Canvas {
+            height: 250px;
+        }
+
+        /* =====================
+           Harmonics
+        ===================== */
+
+        .harmonic-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+
+            margin: 8px 0;
+        }
+
+        .harmonic-number {
+            width: 55px;
+        }
+
+        .harmonic-bar-background {
+            flex: 1;
+            height: 20px;
+
+            background: #eee;
+            border-radius: 10px;
+
+            overflow: hidden;
+        }
+
+        .harmonic-bar {
+            height: 100%;
+            width: 0%;
+
+            background: #222;
+
+            transition:
+                width 0.3s;
+        }
+
+        .harmonic-value {
+            width: 70px;
+            text-align: right;
+        }
+
+        /* =====================
+           Meter
+        ===================== */
+
+        .meter {
+            margin: 20px 0;
+        }
+
+        .meter-title {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .meter-background {
+            height: 25px;
+
+            margin-top: 8px;
+
+            background: #eee;
+
+            border-radius: 15px;
+
+            overflow: hidden;
+        }
+
+        .meter-bar {
+            height: 100%;
+            width: 0%;
+
+            background: #222;
+
+            transition:
+                width 0.4s;
+        }
+
+        /* =====================
+           Character pitch
+        ===================== */
+
+        #pitchResult {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .character {
+            min-width: 75px;
+
+            padding: 12px;
+
+            background: #fafafa;
+
+            border: 1px solid #ddd;
+            border-radius: 8px;
+
+            text-align: center;
+        }
+
+        .character-text {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .frequency {
+            margin-top: 5px;
+            font-size: 15px;
+        }
+
+        .note {
+            margin-top: 3px;
+            font-size: 14px;
+            color: #777;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <h1>🎤 Voice Analyzer</h1>
+
+
+    <!-- =====================
+         操作
+    ====================== -->
+
+    <div class="card">
+
+        <button id="startButton">
+            START
+        </button>
+
+        <button id="stopButton">
+            STOP
+        </button>
+
+        <button id="resetButton">
+            RESET
+        </button>
+
+        <p id="status">
+            待機中
+        </p>
+
+    </div>
+
+
+    <!-- =====================
+         認識結果
+    ====================== -->
+
+    <div class="card">
+
+        <h2>
+            認識結果
+        </h2>
+
+        <div id="result">
+            -
+        </div>
+
+    </div>
+
+
+    <!-- =====================
+         基本周波数
+    ====================== -->
+
+    <div class="card">
+
+        <h2>
+            基本周波数
+        </h2>
+
+        <div>
+
+            <span
+                id="f0Value"
+                class="f0-main">
+                -
+            </span>
+
+            <span
+                id="f0Note"
+                class="f0-note">
+                -
+            </span>
+
+        </div>
+
+
+        <div class="f0-info">
+
+            <div>
+                <span class="label">
+                    最低
+                </span>
+
+                <span id="f0Min">
+                    -
+                </span>
+            </div>
+
+
+            <div>
+                <span class="label">
+                    最高
+                </span>
+
+                <span id="f0Max">
+                    -
+                </span>
+            </div>
+
+
+            <div>
+                <span class="label">
+                    平均
+                </span>
+
+                <span id="f0Average">
+                    -
+                </span>
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================
+         F0時間変化
+    ====================== -->
+
+    <div class="card">
+
+        <h2>
+            基本周波数の時間変化
+        </h2>
+
+        <canvas
+            id="f0Canvas">
+        </canvas>
+
+    </div>
+
+
+    <!-- =====================
+         スペクトル
+    ====================== -->
+
+    <div class="card">
+
+        <h2>
+            周波数スペクトル
+        </h2>
+
+        <canvas
+            id="spectrumCanvas">
+        </canvas>
+
+    </div>
+
+
+    <!-- =====================
+         倍音
+    ====================== -->
+
+    <div class="card">
+
+        <h2>
+            倍音構造
+        </h2>
+
+        <div id="harmonics">
+        </div>
+
+    </div>
+
+
+    <!-- =====================
+         声質
+    ====================== -->
+
+    <div class="card">
+
+        <h2>
+            声質の傾向
+        </h2>
+
+        <p>
+            <strong id="voiceType">
+                -
+            </strong>
+        </p>
+
+
+        <div class="meter">
+
+            <div class="meter-title">
+
+                <span>
+                    倍音豊かさ
+                </span>
+
+                <span id="richnessValue">
+                    0%
+                </span>
+
+            </div>
+
+
+            <div class="meter-background">
+
+                <div
+                    id="richnessBar"
+                    class="meter-bar">
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="meter">
+
+            <div class="meter-title">
+
+                <span>
+                    明るさ
+                </span>
+
+                <span id="brightnessValue">
+                    0%
+                </span>
+
+            </div>
+
+
+            <div class="meter-background">
+
+                <div
+                    id="brightnessBar"
+                    class="meter-bar">
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================
+         文字ごとのF0
+    ====================== -->
+
+    <div class="card">
+
+        <h2>
+            文字ごとの基本周波数
+        </h2>
+
+        <div id="pitchResult">
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+
+// =========================
+// DOM
+// =========================
+
+const startButton =
+    document.getElementById(
+        "startButton"
+    );
+
+const stopButton =
+    document.getElementById(
+        "stopButton"
+    );
+
+const resetButton =
+    document.getElementById(
+        "resetButton"
+    );
+
+const status =
+    document.getElementById(
+        "status"
+    );
+
+const result =
+    document.getElementById(
+        "result"
+    );
+
+const pitchResult =
+    document.getElementById(
+        "pitchResult"
+    );
+
+
+// =========================
+// START
+// =========================
+
+startButton.addEventListener(
+    "click",
+    async () => {
+
+        const response =
+            await fetch(
+                "/start",
+                {
+                    method: "POST"
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            data.status ===
+            "recording"
+        ) {
+
+            status.textContent =
+                "🔴 録音中...";
+
+        }
+
+    }
+);
+
+
+// =========================
+// STOP
+// =========================
+
+stopButton.addEventListener(
+    "click",
+    async () => {
+
+        status.textContent =
+            "解析中...";
+
+        const response =
+            await fetch(
+                "/stop",
+                {
+                    method: "POST"
+                }
+            );
+
+        const data =
+            await response.json();
+
+
+        if (
+            data.status !==
+            "stopped"
+        ) {
+            return;
+        }
+
+
+        // =====================
+        // 認識結果
+        // =====================
+
+        result.textContent =
+            data.text || "-";
+
+
+        // =====================
+        // F0
+        // =====================
+
+        updateF0(
+            data.f0
+        );
+
+
+        // =====================
+        // スペクトル
+        // =====================
+
+        drawSpectrum(
+            data.spectrum
+        );
+
+
+        // =====================
+        // F0グラフ
+        // =====================
+
+        drawF0Graph(
+            data.f0
+        );
+
+
+        // =====================
+        // 倍音
+        // =====================
+
+        updateHarmonics(
+            data.harmonics
+        );
+
+
+        // =====================
+        // 声質
+        // =====================
+
+        document.getElementById(
+            "voiceType"
+        ).textContent =
+            data.voice_type;
+
+
+        setMeter(
+            "richness",
+            data.harmonic_richness
+        );
+
+
+        setMeter(
+            "brightness",
+            data.brightness
+        );
+
+
+        // =====================
+        // 文字ごとのF0
+        // =====================
+
+        pitchResult.innerHTML =
+            "";
+
+        data.pitch_data.forEach(
+            (item) => {
+
+                const character =
+                    document.createElement(
+                        "div"
+                    );
+
+                character.className =
+                    "character";
+
+
+                character.innerHTML = `
+
+                    <div
+                        class="character-text">
+                        ${item.character}
+                    </div>
+
+                    <div
+                        class="frequency">
+                        ${
+                            item.frequency
+                                ? item.frequency.toFixed(1) + " Hz"
+                                : "-"
+                        }
+                    </div>
+
+                    <div
+                        class="note">
+                        ${item.note}
+                    </div>
+
+                `;
+
+
+                pitchResult.appendChild(
+                    character
+                );
+
+            }
+        );
+
+
+        status.textContent =
+            "解析完了！";
+
+    }
+);
+
+
+// =========================
+// RESET
+// =========================
+
+resetButton.addEventListener(
+    "click",
+    async () => {
+
+        await fetch(
+            "/reset",
+            {
+                method: "POST"
+            }
+        );
+
+
+        status.textContent =
+            "待機中";
+
+        result.textContent =
+            "-";
+
+        pitchResult.innerHTML =
+            "";
+
+        document.getElementById(
+            "f0Value"
+        ).textContent = "-";
+
+        document.getElementById(
+            "f0Note"
+        ).textContent = "-";
+
+        document.getElementById(
+            "f0Min"
+        ).textContent = "-";
+
+        document.getElementById(
+            "f0Max"
+        ).textContent = "-";
+
+        document.getElementById(
+            "f0Average"
+        ).textContent = "-";
+
+        document.getElementById(
+            "voiceType"
+        ).textContent = "-";
+
+        setMeter(
+            "richness",
+            0
+        );
+
+        setMeter(
+            "brightness",
+            0
+        );
+
+        document.getElementById(
+            "harmonics"
+        ).innerHTML = "";
+
+        clearCanvas(
+            "spectrumCanvas"
+        );
+
+        clearCanvas(
+            "f0Canvas"
+        );
+
+    }
+);
+
+
+// =========================
+// F0表示
+// =========================
+
+function updateF0(f0) {
+
+    if (
+        !f0 ||
+        f0.current === null
+    ) {
+        return;
+    }
+
+    document.getElementById(
+        "f0Value"
+    ).textContent =
+        f0.current.toFixed(1) +
+        " Hz";
+
+
+    document.getElementById(
+        "f0Note"
+    ).textContent =
+        f0.note;
+
+
+    document.getElementById(
+        "f0Min"
+    ).textContent =
+        f0.min.toFixed(1) +
+        " Hz";
+
+
+    document.getElementById(
+        "f0Max"
+    ).textContent =
+        f0.max.toFixed(1) +
+        " Hz";
+
+
+    document.getElementById(
+        "f0Average"
+    ).textContent =
+        f0.average.toFixed(1) +
+        " Hz";
+}
+
+
+// =========================
+// 倍音
+// =========================
+
+function updateHarmonics(
+    harmonics
+) {
+
+    const container =
+        document.getElementById(
+            "harmonics"
+        );
+
+    container.innerHTML = "";
+
+
+    harmonics.forEach(
+        (harmonic) => {
+
+            const row =
+                document.createElement(
+                    "div"
+                );
+
+            row.className =
+                "harmonic-row";
+
+
+            row.innerHTML = `
+
+                <div
+                    class="harmonic-number">
+                    ${harmonic.number}倍音
+                </div>
+
+                <div
+                    class="harmonic-bar-background">
+
+                    <div
+                        class="harmonic-bar"
+                        style="width: ${harmonic.strength}%">
+                    </div>
+
+                </div>
+
+                <div
+                    class="harmonic-value">
+                    ${harmonic.strength.toFixed(1)}%
+                </div>
+
+            `;
+
+
+            container.appendChild(
+                row
+            );
+
+        }
+    );
+}
+
+
+// =========================
+// メーター
+// =========================
+
+function setMeter(
+    type,
+    value
+) {
+
+    value =
+        Math.max(
+            0,
+            Math.min(
+                100,
+                value || 0
+            )
+        );
+
+
+    document.getElementById(
+        type + "Value"
+    ).textContent =
+        value.toFixed(1) +
+        "%";
+
+
+    document.getElementById(
+        type + "Bar"
+    ).style.width =
+        value + "%";
+}
+
+
+// =========================
+// スペクトル
+// =========================
+
+function drawSpectrum(
+    spectrum
+) {
+
+    if (
+        !spectrum ||
+        spectrum.frequencies.length === 0
+    ) {
+        return;
+    }
+
+
+    const canvas =
+        document.getElementById(
+            "spectrumCanvas"
+        );
+
+    const ctx =
+        canvas.getContext("2d");
+
+
+    const width =
+        canvas.clientWidth;
+
+    const height =
+        canvas.clientHeight;
+
+
+    canvas.width = width;
+    canvas.height = height;
+
+
+    ctx.clearRect(
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    const frequencies =
+        spectrum.frequencies;
+
+    const magnitudes =
+        spectrum.magnitudes;
+
+
+    const minDb = -80;
+    const maxDb = 0;
+
+
+    ctx.beginPath();
+
+
+    for (
+        let i = 0;
+        i < frequencies.length;
+        i++
+    ) {
+
+        const x =
+            frequencies[i] /
+            5000 *
+            width;
+
+
+        const normalized =
+            (
+                magnitudes[i] -
+                minDb
+            ) /
+            (maxDb - minDb);
+
+
+        const y =
+            height -
+            normalized * height;
+
+
+        if (i === 0) {
+
+            ctx.moveTo(
+                x,
+                y
+            );
+
+        } else {
+
+            ctx.lineTo(
+                x,
+                y
+            );
+
+        }
+
+    }
+
+
+    ctx.strokeStyle =
+        "#222";
+
+    ctx.lineWidth = 2;
+
+    ctx.stroke();
+}
+
+
+// =========================
+// F0グラフ
+// =========================
+
+function drawF0Graph(
+    f0
+) {
+
+    if (
+        !f0 ||
+        !f0.values ||
+        f0.values.length === 0
+    ) {
+        return;
+    }
+
+
+    const canvas =
+        document.getElementById(
+            "f0Canvas"
+        );
+
+    const ctx =
+        canvas.getContext("2d");
+
+
+    const width =
+        canvas.clientWidth;
+
+    const height =
+        canvas.clientHeight;
+
+
+    canvas.width = width;
+    canvas.height = height;
+
+
+    ctx.clearRect(
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    const values =
+        f0.values;
+
+
+    const valid =
+        values.filter(
+            value =>
+                value !== null &&
+                value > 0
+        );
+
+
+    if (valid.length === 0) {
+        return;
+    }
+
+
+    const min =
+        Math.min(...valid);
+
+    const max =
+        Math.max(...valid);
+
+
+    ctx.beginPath();
+
+
+    values.forEach(
+        (value, index) => {
+
+            if (
+                value === null ||
+                value <= 0
+            ) {
+                return;
+            }
+
+
+            const x =
+                index /
+                (values.length - 1) *
+                width;
+
+
+            const normalized =
+                (
+                    value - min
+                ) /
+                Math.max(
+                    max - min,
+                    1
+                );
+
+
+            const y =
+                height -
+                normalized * height;
+
+
+            if (index === 0) {
+
+                ctx.moveTo(
+                    x,
+                    y
+                );
+
+            } else {
+
+                ctx.lineTo(
+                    x,
+                    y
+                );
+
+            }
+
+        }
+    );
+
+
+    ctx.strokeStyle =
+        "#222";
+
+    ctx.lineWidth = 2;
+
+    ctx.stroke();
+}
+
+
+// =========================
+// Canvasクリア
+// =========================
+
+function clearCanvas(
+    id
+) {
+
+    const canvas =
+        document.getElementById(
+            id
+        );
+
+    const ctx =
+        canvas.getContext("2d");
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+}
+
+</script>
+
+</body>
+
+</html>
