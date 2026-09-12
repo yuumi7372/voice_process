@@ -1,11 +1,11 @@
 from flask import Flask, render_template, jsonify
 import pyaudio
 import wave
-import speech_recognition as sr
 import threading
 import os
 import librosa
 import numpy as np
+import whisperx
 
 
 app = Flask(__name__)
@@ -24,6 +24,22 @@ OUTPUT_FILE = "recorded.wav"
 
 
 # =========================
+# WhisperX設定
+# =========================
+
+# GPUが使えるなら cuda
+# CPUなら cpu
+DEVICE = "cpu"
+ALIGN_DEVICE = "xpu"
+
+# CPUの場合は int8
+# GPUなら float16 が基本
+COMPUTE_TYPE = "int8"
+
+WHISPER_MODEL = "small"
+
+
+# =========================
 # 録音状態
 # =========================
 
@@ -33,10 +49,39 @@ frames = []
 
 
 # =========================
+# WhisperXモデル
+# =========================
+
+whisper_model = None
+align_model = None
+align_metadata = None
+
+
+def load_whisper_models():
+
+    global whisper_model
+    global align_model
+    global align_metadata
+
+    if whisper_model is None:
+
+        print("WhisperXモデルを読み込み中...")
+
+        whisper_model = whisperx.load_model(
+            WHISPER_MODEL,
+            DEVICE,
+            compute_type=COMPUTE_TYPE
+        )
+
+        print("WhisperXモデル読み込み完了")
+
+
+# =========================
 # 録音
 # =========================
 
 def record_audio():
+
     global recording
     global frames
 
@@ -55,7 +100,9 @@ def record_audio():
     print("録音開始！")
 
     while recording:
+
         try:
+
             data = stream.read(
                 CHUNK,
                 exception_on_overflow=False
@@ -64,7 +111,9 @@ def record_audio():
             frames.append(data)
 
         except Exception as e:
+
             print("録音エラー:", e)
+
             break
 
     print("録音終了！")
@@ -72,16 +121,25 @@ def record_audio():
     stream.stop_stream()
     stream.close()
 
-    sample_width = audio.get_sample_size(FORMAT)
+    sample_width = audio.get_sample_size(
+        FORMAT
+    )
 
     audio.terminate()
 
     # WAV保存
-    with wave.open(OUTPUT_FILE, "wb") as wf:
+
+    with wave.open(
+        OUTPUT_FILE,
+        "wb"
+    ) as wf:
+
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(sample_width)
         wf.setframerate(RATE)
-        wf.writeframes(b"".join(frames))
+        wf.writeframes(
+            b"".join(frames)
+        )
 
 
 # =========================
@@ -91,6 +149,7 @@ def record_audio():
 def frequency_to_note(frequency):
 
     if frequency is None or frequency <= 0:
+
         return "-"
 
     note_names = [
@@ -100,10 +159,13 @@ def frequency_to_note(frequency):
     ]
 
     midi = round(
-        69 + 12 * np.log2(frequency / 440)
+        69 + 12 * np.log2(
+            frequency / 440
+        )
     )
 
     note = note_names[midi % 12]
+
     octave = midi // 12 - 1
 
     return f"{note}{octave}"
@@ -149,11 +211,6 @@ def analyze_pitch():
             hop_length=512
         )
 
-        print("F0:")
-        print(f0)
-        print("最低:", np.nanmin(f0))
-        print("最高:", np.nanmax(f0))
-
         return f0, times
 
     except Exception as e:
@@ -175,6 +232,7 @@ def analyze_f0():
     f0, times = analyze_pitch()
 
     if len(f0) == 0:
+
         return {
             "current": None,
             "note": "-",
@@ -203,18 +261,35 @@ def analyze_f0():
         }
 
     return {
-        "current": float(valid[-1]),
-        "note": frequency_to_note(
-            float(valid[-1])
-        ),
-        "min": float(np.min(valid)),
-        "max": float(np.max(valid)),
-        "average": float(np.mean(valid)),
-        "times": times.tolist(),
+
+        "current":
+            float(valid[-1]),
+
+        "note":
+            frequency_to_note(
+                float(valid[-1])
+            ),
+
+        "min":
+            float(np.min(valid)),
+
+        "max":
+            float(np.max(valid)),
+
+        "average":
+            float(np.mean(valid)),
+
+        "times":
+            times.tolist(),
+
         "values": [
-            None if np.isnan(value)
+
+            None
+            if np.isnan(value)
             else float(value)
+
             for value in f0
+
         ]
     }
 
@@ -229,51 +304,65 @@ def analyze_spectrum():
 
         y, sr_rate = load_audio()
 
-        # 音量が大きすぎる場合に備えて正規化
         if np.max(np.abs(y)) > 0:
-            y = y / np.max(np.abs(y))
 
-        # ハニング窓
-        window = np.hanning(len(y))
+            y = y / np.max(
+                np.abs(y)
+            )
+
+        window = np.hanning(
+            len(y)
+        )
 
         signal = y * window
 
-        # FFT
-        fft_result = np.fft.rfft(signal)
+        fft_result = np.fft.rfft(
+            signal
+        )
 
-        magnitude = np.abs(fft_result)
+        magnitude = np.abs(
+            fft_result
+        )
 
         frequencies = np.fft.rfftfreq(
             len(signal),
             1 / sr_rate
         )
 
-        # dB化
         magnitude_db = librosa.amplitude_to_db(
             magnitude,
             ref=np.max
         )
 
-        # 0〜5000Hz程度を表示対象にする
         max_display_frequency = 5000
 
-        mask = frequencies <= max_display_frequency
+        mask = (
+            frequencies <=
+            max_display_frequency
+        )
 
         return {
+
             "frequencies":
                 frequencies[mask].tolist(),
 
             "magnitudes":
                 magnitude_db[mask].tolist()
+
         }
 
     except Exception as e:
 
-        print("スペクトル解析エラー:", e)
+        print(
+            "スペクトル解析エラー:",
+            e
+        )
 
         return {
+
             "frequencies": [],
             "magnitudes": []
+
         }
 
 
@@ -295,17 +384,21 @@ def analyze_harmonics():
         ]
 
         if len(valid_f0) == 0:
+
             return []
 
-        # 基本周波数は中央値
         fundamental = float(
             np.median(valid_f0)
         )
 
-        # FFT
-        window = np.hanning(len(y))
+        window = np.hanning(
+            len(y)
+        )
+
         spectrum = np.abs(
-            np.fft.rfft(y * window)
+            np.fft.rfft(
+                y * window
+            )
         )
 
         frequencies = np.fft.rfftfreq(
@@ -315,31 +408,39 @@ def analyze_harmonics():
 
         harmonics = []
 
-        # 1〜12倍音
-        for harmonic_number in range(1, 13):
+        for harmonic_number in range(
+            1,
+            13
+        ):
 
             target_frequency = (
                 fundamental *
                 harmonic_number
             )
 
-            if target_frequency >= sr_rate / 2:
+            if (
+                target_frequency >=
+                sr_rate / 2
+            ):
+
                 break
 
-            # 対象周波数の±5Hzを見る
             frequency_range = 5
 
             mask = (
                 np.abs(
                     frequencies -
                     target_frequency
-                ) <= frequency_range
+                ) <=
+                frequency_range
             )
 
             if np.any(mask):
 
                 strength = float(
-                    np.max(spectrum[mask])
+                    np.max(
+                        spectrum[mask]
+                    )
                 )
 
             else:
@@ -347,17 +448,23 @@ def analyze_harmonics():
                 strength = 0.0
 
             harmonics.append({
-                "number": harmonic_number,
+
+                "number":
+                    harmonic_number,
+
                 "frequency":
                     target_frequency,
+
                 "note":
                     frequency_to_note(
                         target_frequency
                     ),
-                "strength": strength
+
+                "strength":
+                    strength
+
             })
 
-        # 強さを0〜100に正規化
         if harmonics:
 
             max_strength = max(
@@ -368,6 +475,7 @@ def analyze_harmonics():
             if max_strength > 0:
 
                 for h in harmonics:
+
                     h["strength"] = (
                         h["strength"] /
                         max_strength *
@@ -378,7 +486,10 @@ def analyze_harmonics():
 
     except Exception as e:
 
-        print("倍音解析エラー:", e)
+        print(
+            "倍音解析エラー:",
+            e
+        )
 
         return []
 
@@ -392,6 +503,7 @@ def calculate_harmonic_richness(
 ):
 
     if not harmonics:
+
         return 0
 
     strengths = [
@@ -402,9 +514,9 @@ def calculate_harmonic_richness(
     total = sum(strengths)
 
     if total <= 0:
+
         return 0
 
-    # 4倍音以上を高次倍音として扱う
     high_harmonics = sum(
         h["strength"]
         for h in harmonics
@@ -431,6 +543,7 @@ def calculate_brightness(
 ):
 
     if not harmonics:
+
         return 0
 
     strengths = [
@@ -441,9 +554,9 @@ def calculate_brightness(
     total = sum(strengths)
 
     if total <= 0:
+
         return 0
 
-    # 3倍音以上の割合
     high_harmonics = sum(
         h["strength"]
         for h in harmonics
@@ -470,63 +583,291 @@ def get_voice_type(
 ):
 
     if richness < 25:
+
         return "倍音が少ない"
 
     elif richness < 45:
+
         return "バランス型"
 
     elif richness < 65:
+
         return "倍音豊か"
 
     else:
+
         return "高次倍音が強い"
 
 
 # =========================
-# 文字ごとのF0
+# WhisperXによる音声認識
 # =========================
 
-def analyze_text_pitch(text):
+def recognize_audio():
+
+    try:
+
+        load_whisper_models()
+
+        print("音声認識中...")
+
+        audio = whisperx.load_audio(
+            OUTPUT_FILE
+        )
+
+        AUDIO_SR = 16000
+
+        print("audio samples:", len(audio))
+        print("audio duration:", len(audio) / AUDIO_SR)
+
+        result = whisper_model.transcribe(
+            audio,
+            language="ja",
+            batch_size=4
+        )
+
+        print("認識結果:")
+
+        for segment in result["segments"]:
+
+            print(
+                segment["start"],
+                "〜",
+                segment["end"],
+                segment["text"]
+            )
+
+        return result
+
+    except Exception as e:
+
+        print(
+            "WhisperX音声認識エラー:",
+            e
+        )
+
+        return {
+            "segments": [],
+            "language": "ja"
+        }
+
+
+# =========================
+# 文字ごとの時間情報＋音量
+# =========================
+
+def analyze_text_alignment(
+    result
+):
+
+    global align_model
+    global align_metadata
+
+    if not result.get("segments"):
+
+        return []
+
+    try:
+
+        # 音声読み込み
+        audio = whisperx.load_audio(
+            OUTPUT_FILE
+        )
+
+        AUDIO_SR = 16000
+
+        # =========================
+        # 日本語用アライメントモデル
+        # =========================
+
+        if align_model is None:
+
+            print(
+                "日本語アライメントモデルを読み込み中..."
+            )
+
+            align_model, align_metadata = whisperx.load_align_model(
+                language_code="ja",
+                device=ALIGN_DEVICE
+            )
+
+        # =========================
+        # 文字単位でアライメント
+        # =========================
+
+        aligned = whisperx.align(
+            result["segments"],
+            align_model,
+            align_metadata,
+            audio,
+            ALIGN_DEVICE,
+            return_char_alignments=True
+        )
+
+        results = []
+
+        # =========================
+        # 文字ごとの情報を取得
+        # =========================
+
+        print("ALIGN RESULT:")
+        print(aligned["segments"])
+
+        for segment in aligned["segments"]:
+
+            chars = segment.get(
+                "chars",
+                []
+            )
+
+            for char_data in chars:
+
+                character = char_data.get(
+                    "char",
+                    ""
+                )
+
+                start = char_data.get(
+                    "start"
+                )
+
+                end = char_data.get(
+                    "end"
+                )
+
+                if (
+                    start is None or
+                    end is None
+                ):
+
+                    continue
+
+                start = float(start)
+                end = float(end)
+
+                # =========================
+                # その文字に対応する音声を切り出す
+                # =========================
+
+                start_sample = int(start * AUDIO_SR)
+                end_sample = int(end * AUDIO_SR)
+
+                # 音声配列の範囲内に収める
+                start_sample = max(0, min(start_sample, len(audio)))
+                end_sample = max(0, min(end_sample, len(audio)))
+
+                segment_audio = audio[start_sample:end_sample]
+
+                if len(segment_audio) == 0:
+                    print(
+                        character,
+                        "samples: 0",
+                        "time:", start, "〜", end
+                    )
+                    continue
+
+                print(
+                    character,
+                    "samples:", len(segment_audio),
+                    "min:", np.min(segment_audio),
+                    "max:", np.max(segment_audio),
+                    "max_abs:", np.max(np.abs(segment_audio))
+                )
+                # =========================
+                # 音量（RMS）を計算
+                # =========================
+
+                if len(segment_audio) > 0:
+
+                    rms = np.sqrt(
+                        np.mean(
+                            segment_audio ** 2
+                        )
+                    )
+
+                    # dBFSに変換
+                    if rms > 0:
+
+                        volume = 20 * np.log10(
+                            rms
+                        )
+
+                    else:
+
+                        volume = -100.0
+
+                else:
+
+                    volume = -100.0
+
+                results.append({
+
+                    "character":
+                        character,
+
+                    "start":
+                        start,
+
+                    "end":
+                        end,
+
+                    "volume":
+                        float(volume)
+
+                })
+
+        # =========================
+        # 結果表示
+        # =========================
+
+        print("文字ごとの時間＋音量:")
+
+        for item in results:
+
+            print(
+                item["character"],
+                item["start"],
+                "〜",
+                item["end"],
+                "音量:",
+                item["volume"],
+                "dBFS"
+            )
+
+        return results
+
+    except Exception as e:
+
+        print(
+            "アライメントエラー:",
+            e
+        )
+
+        return []
+
+# =========================
+# 文字 × F0
+# =========================
+
+def analyze_text_pitch(
+    alignment_data
+):
 
     f0, times = analyze_pitch()
 
-    if len(f0) == 0 or not text:
+    if (
+        len(f0) == 0 or
+        not alignment_data
+    ):
+
         return []
-
-    valid_f0 = f0[
-        ~np.isnan(f0) &
-        (f0 > 0)
-    ]
-
-    if len(valid_f0) == 0:
-        return []
-
-    audio_duration = len(
-        librosa.load(
-            OUTPUT_FILE,
-            sr=RATE,
-            mono=True
-        )[0]
-    ) / RATE
-
-    character_duration = (
-        audio_duration /
-        len(text)
-    )
 
     results = []
 
-    for i, character in enumerate(text):
+    for item in alignment_data:
 
-        start_time = (
-            i *
-            character_duration
-        )
-
-        end_time = (
-            (i + 1) *
-            character_duration
-        )
+        start_time = item["start"]
+        end_time = item["end"]
 
         mask = (
             (times >= start_time) &
@@ -555,69 +896,25 @@ def analyze_text_pitch(text):
             note = "-"
 
         results.append({
-            "character": character,
-            "frequency": frequency,
-            "note": note,
-            "start": start_time,
-            "end": end_time
+
+            "character":
+                item["character"],
+
+            "frequency":
+                frequency,
+
+            "note":
+                note,
+
+            "start":
+                start_time,
+
+            "end":
+                end_time
+
         })
 
     return results
-
-
-# =========================
-# 音声認識
-# =========================
-
-def recognize_audio():
-
-    recognizer = sr.Recognizer()
-
-    print("音声認識中...")
-
-    try:
-
-        with sr.AudioFile(
-            OUTPUT_FILE
-        ) as source:
-
-            audio = recognizer.record(
-                source
-            )
-
-        text = recognizer.recognize_google(
-            audio,
-            language="ja-JP"
-        )
-
-        print("認識結果：")
-        print(text)
-
-        return text
-
-    except sr.UnknownValueError:
-
-        print(
-            "音声を認識できませんでした"
-        )
-
-        return ""
-
-    except sr.RequestError as e:
-
-        print(
-            "音声認識サービスに接続できませんでした"
-        )
-
-        print(e)
-
-        return ""
-
-    except Exception as e:
-
-        print("音声認識エラー:", e)
-
-        return ""
 
 
 # =========================
@@ -663,7 +960,8 @@ def start_recording():
     recording_thread.start()
 
     return jsonify({
-        "status": "recording"
+        "status":
+            "recording"
     })
 
 
@@ -697,7 +995,26 @@ def stop_recording():
     # 音声認識
     # =====================
 
-    text = recognize_audio()
+    transcription = recognize_audio()
+
+    text = "".join(
+        segment["text"]
+        for segment
+        in transcription.get(
+            "segments",
+            []
+        )
+    )
+
+    # =====================
+    # 文字アライメント
+    # =====================
+
+    alignment_data = (
+        analyze_text_alignment(
+            transcription
+        )
+    )
 
     # =====================
     # 音響解析
@@ -705,9 +1022,13 @@ def stop_recording():
 
     f0_data = analyze_f0()
 
-    spectrum_data = analyze_spectrum()
+    spectrum_data = (
+        analyze_spectrum()
+    )
 
-    harmonics = analyze_harmonics()
+    harmonics = (
+        analyze_harmonics()
+    )
 
     richness = (
         calculate_harmonic_richness(
@@ -726,24 +1047,22 @@ def stop_recording():
     )
 
     # =====================
-    # 文字ごとのF0
+    # 文字 × F0
     # =====================
 
-    pitch_data = []
-
-    if text:
-
-        pitch_data = (
-            analyze_text_pitch(
-                text
-            )
+    pitch_data = (
+        analyze_text_pitch(
+            alignment_data
         )
+    )
 
     return jsonify({
 
-        "status": "stopped",
+        "status":
+            "stopped",
 
-        "text": text,
+        "text":
+            text,
 
         "pitch_data":
             pitch_data,
@@ -783,6 +1102,7 @@ def reset():
     global frames
 
     recording = False
+
     frames = []
 
     if os.path.exists(
@@ -794,7 +1114,8 @@ def reset():
         )
 
     return jsonify({
-        "status": "reset"
+        "status":
+            "reset"
     })
 
 
