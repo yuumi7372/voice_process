@@ -1,4 +1,5 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
 import pyaudio
 import wave
 import threading
@@ -9,18 +10,19 @@ import whisperx
 
 
 app = Flask(__name__)
+CORS(app)
 
 
 # =========================
 # 録音設定
 # =========================
 
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
+#FORMAT = pyaudio.paInt16
+#CHANNELS = 1
 RATE = 44100
-CHUNK = 1024
+#CHUNK = 1024
 
-OUTPUT_FILE = "recorded.wav"
+OUTPUT_FILE = "voice_test.wav"
 
 
 # =========================
@@ -1118,6 +1120,47 @@ def reset():
             "reset"
     })
 
+#フロントからWAVを受診して解析するエンドポイント
+@app.route("/upload", methods=["POST"])
+def upload_audio():
+    if "audio" not in request.files:
+        return jsonify({"error": "音声ファイルがありません"}), 400
+
+    audio_file = request.files["audio"]
+    audio_file.save(OUTPUT_FILE)
+    
+    #音声認識
+    transcription = recognize_audio()
+    text = "".join(
+        segment["text"]
+        for segment
+        in transcription.get(
+            "segments",
+            []
+        )
+    )
+    #文字アライメント
+    alignment_data = analyze_text_alignment(transcription)
+    #音響解析
+    f0_data = analyze_f0()
+    spectrum_data = analyze_spectrum()
+    harmonics = analyze_harmonics()
+    richness = calculate_harmonic_richness(harmonics)
+    brightness = calculate_brightness(harmonics)
+    voice_type = get_voice_type(richness)
+    #文字
+    pitch_data = analyze_text_pitch(alignment_data)
+    return jsonify({
+        "status": "success",
+        "text": text,
+        "pitch_data": pitch_data,
+        "f0": f0_data,
+        "spectrum": spectrum_data,
+        "harmonics": harmonics,
+        "harmonic_richness": richness,
+        "brightness": brightness,
+        "voice_type": voice_type
+    })
 
 # =========================
 # 起動
